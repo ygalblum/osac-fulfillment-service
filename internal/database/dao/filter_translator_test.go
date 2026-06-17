@@ -70,7 +70,7 @@ var _ = Describe("Filter translator", func() {
 		Entry(
 			"String in list",
 			"this.my_string in ['a', 'b', 'c']",
-			"data->>'my_string' in ('a', 'b', 'c')",
+			"coalesce(data->>'my_string', '') in ('a', 'b', 'c')",
 		),
 		Entry(
 			"Calculated value in list",
@@ -80,12 +80,12 @@ var _ = Describe("Filter translator", func() {
 		Entry(
 			"String contains",
 			`this.my_string.contains("my value")`,
-			`data->>'my_string' like '%my value%'`,
+			`coalesce(data->>'my_string', '') like '%my value%'`,
 		),
 		Entry(
 			"Nested string",
 			`this.spec.spec_string == 'my_value'`,
-			`data->'spec'->>'spec_string' = 'my_value'`,
+			`coalesce(data->'spec'->>'spec_string', '') = 'my_value'`,
 		),
 		Entry(
 			"Name equals value",
@@ -225,22 +225,22 @@ var _ = Describe("Filter translator", func() {
 		Entry(
 			"String starts with",
 			`this.my_string.startsWith("my")`,
-			`data->>'my_string' like 'my%'`,
+			`coalesce(data->>'my_string', '') like 'my%'`,
 		),
 		Entry(
 			"String ends with",
 			`this.my_string.endsWith("my")`,
-			`data->>'my_string' like '%my'`,
+			`coalesce(data->>'my_string', '') like '%my'`,
 		),
 		Entry(
 			"Escape percent in like pattern",
 			`this.my_string.startsWith("my%")`,
-			`data->>'my_string' like 'my\%%'`,
+			`coalesce(data->>'my_string', '') like 'my\%%'`,
 		),
 		Entry(
 			"Escape underscore in like pattern",
 			`this.my_string.startsWith("my_")`,
-			`data->>'my_string' like 'my\_%'`,
+			`coalesce(data->>'my_string', '') like 'my\_%'`,
 		),
 		Entry(
 			"Check if object is deleted",

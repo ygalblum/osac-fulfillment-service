@@ -876,7 +876,7 @@ func (t *FilterTranslator[O]) translateSelectJsonField(operandSql string, msgDes
 		result.sql = fmt.Sprintf("cast(%s->>'%s' as double precision)", operandSql, fieldName)
 		result.kind = filterTranslatorNumericKind
 	case protoreflect.StringKind:
-		result.sql = fmt.Sprintf("%s->>'%s'", operandSql, fieldName)
+		result.sql = fmt.Sprintf("coalesce(%s->>'%s', '')", operandSql, fieldName)
 		result.kind = filterTranslatorStringKind
 	case protoreflect.MessageKind:
 		msgDesc := fieldDesc.Message()
