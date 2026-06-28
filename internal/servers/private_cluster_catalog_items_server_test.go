@@ -540,6 +540,168 @@ var _ = Describe("Private cluster catalog items server", func() {
 			Expect(response.GetObject()).ToNot(BeNil())
 		})
 
+		It("Rejects non-editable field definition without default when not first in list", func() {
+			_, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Bad catalog item",
+					Template: "my-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.pull_secret",
+							Editable: true,
+						}.Build(),
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.ssh_public_key",
+							Editable: false,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("ssh_public_key"))
+		})
+
+		It("Rejects field definition with invalid validation_schema JSON", func() {
+			_, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Bad schema catalog item",
+					Template: "my-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.network.pod_cidr",
+							Editable:         true,
+							ValidationSchema: "{not valid json}",
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("pod_cidr"))
+			Expect(status.Message()).To(ContainSubstring("invalid validation_schema"))
+		})
+
+		It("Accepts field definition with valid validation_schema JSON", func() {
+			response, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Valid schema catalog item",
+					Template: "my-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.network.pod_cidr",
+							Editable:         true,
+							ValidationSchema: `{"type":"string","pattern":"^[0-9./]+$"}`,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response.GetObject()).ToNot(BeNil())
+		})
+
+		It("Rejects update that introduces non-editable field without default", func() {
+			createResponse, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			_, err = server.Update(ctx, privatev1.ClusterCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.pull_secret",
+							Editable: false,
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("pull_secret"))
+			Expect(status.Message()).To(ContainSubstring("default value"))
+		})
+
+		It("Rejects update that introduces invalid validation_schema", func() {
+			createResponse, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			_, err = server.Update(ctx, privatev1.ClusterCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.network.pod_cidr",
+							Editable:         true,
+							ValidationSchema: "{bad json}",
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("invalid validation_schema"))
+		})
+
+		It("Accepts update with valid field definitions", func() {
+			createResponse, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			updateResponse, err := server.Update(ctx, privatev1.ClusterCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ClusterCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.pull_secret",
+							Editable: false,
+							Default:  structpb.NewStringValue("locked-secret"),
+						}.Build(),
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.network.pod_cidr",
+							Editable:         true,
+							ValidationSchema: `{"type":"string"}`,
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(updateResponse.GetObject().GetFieldDefinitions()).To(HaveLen(2))
+		})
+
 		It("Allows empty name without conflict", func() {
 			_, err := server.Create(ctx, privatev1.ClusterCatalogItemsCreateRequest_builder{
 				Object: privatev1.ClusterCatalogItem_builder{

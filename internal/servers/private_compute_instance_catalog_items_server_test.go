@@ -539,6 +539,168 @@ var _ = Describe("Private compute instance catalog items server", func() {
 			Expect(response.GetObject()).ToNot(BeNil())
 		})
 
+		It("Rejects non-editable field definition without default when not first in list", func() {
+			_, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Bad catalog item",
+					Template: "my-ci-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.cores",
+							Editable: true,
+						}.Build(),
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.memory_gib",
+							Editable: false,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("memory_gib"))
+		})
+
+		It("Rejects field definition with invalid validation_schema JSON", func() {
+			_, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Bad schema catalog item",
+					Template: "my-ci-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.cores",
+							Editable:         true,
+							ValidationSchema: "{not valid json}",
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("cores"))
+			Expect(status.Message()).To(ContainSubstring("invalid validation_schema"))
+		})
+
+		It("Accepts field definition with valid validation_schema JSON", func() {
+			response, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Valid schema catalog item",
+					Template: "my-ci-template-id",
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.cores",
+							Editable:         true,
+							ValidationSchema: `{"type":"number","minimum":1}`,
+						}.Build(),
+					},
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response.GetObject()).ToNot(BeNil())
+		})
+
+		It("Rejects update that introduces non-editable field without default", func() {
+			createResponse, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-ci-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			_, err = server.Update(ctx, privatev1.ComputeInstanceCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.cores",
+							Editable: false,
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("cores"))
+			Expect(status.Message()).To(ContainSubstring("default value"))
+		})
+
+		It("Rejects update that introduces invalid validation_schema", func() {
+			createResponse, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-ci-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			_, err = server.Update(ctx, privatev1.ComputeInstanceCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.cores",
+							Editable:         true,
+							ValidationSchema: "{bad json}",
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+			Expect(status.Message()).To(ContainSubstring("invalid validation_schema"))
+		})
+
+		It("Accepts update with valid field definitions", func() {
+			createResponse, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Title:    "Valid catalog item",
+					Template: "my-ci-template-id",
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			id := createResponse.GetObject().GetId()
+
+			updateResponse, err := server.Update(ctx, privatev1.ComputeInstanceCatalogItemsUpdateRequest_builder{
+				Object: privatev1.ComputeInstanceCatalogItem_builder{
+					Id: id,
+					FieldDefinitions: []*privatev1.FieldDefinition{
+						privatev1.FieldDefinition_builder{
+							Path:     "spec.cores",
+							Editable: false,
+							Default:  structpb.NewNumberValue(4),
+						}.Build(),
+						privatev1.FieldDefinition_builder{
+							Path:             "spec.memory_gib",
+							Editable:         true,
+							ValidationSchema: `{"type":"number"}`,
+						}.Build(),
+					},
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{"field_definitions"},
+				},
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(updateResponse.GetObject().GetFieldDefinitions()).To(HaveLen(2))
+		})
+
 		It("Allows empty name without conflict", func() {
 			_, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{
 				Object: privatev1.ComputeInstanceCatalogItem_builder{

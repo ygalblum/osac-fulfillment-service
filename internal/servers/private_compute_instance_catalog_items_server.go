@@ -148,9 +148,11 @@ func (s *PrivateComputeInstanceCatalogItemsServer) Create(ctx context.Context,
 
 func (s *PrivateComputeInstanceCatalogItemsServer) Update(ctx context.Context,
 	request *privatev1.ComputeInstanceCatalogItemsUpdateRequest) (response *privatev1.ComputeInstanceCatalogItemsUpdateResponse, err error) {
-	// Validate instance type in field_definitions before updating.
 	var warnings []string
 	if request.GetObject() != nil {
+		if err = validateFieldDefinitions(request.GetObject().GetFieldDefinitions()); err != nil {
+			return
+		}
 		warnings, err = s.validateFieldDefinitionsInstanceType(ctx, request.GetObject().GetFieldDefinitions())
 		if err != nil {
 			return
