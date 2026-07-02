@@ -1342,6 +1342,37 @@ var _ = Describe("Private clusters server", func() {
 				Expect(nodeSets["worker"].GetSize()).To(Equal(int32(2)))
 			})
 
+			It("Fails when catalog item has no template", func() {
+				_, err := catalogItemsDao.Create().SetObject(
+					privatev1.ClusterCatalogItem_builder{
+						Id: "cat-no-template",
+						Metadata: privatev1.Metadata_builder{
+							Name:   "cat-no-template-name",
+							Tenant: "shared",
+						}.Build(),
+						Title:     "Catalog Item Without Template",
+						Published: true,
+					}.Build(),
+				).Do(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				_, err = server.Create(ctx, privatev1.ClustersCreateRequest_builder{
+					Object: privatev1.Cluster_builder{
+						Spec: privatev1.ClusterSpec_builder{
+							CatalogItem: "cat-no-template",
+						}.Build(),
+						Status: privatev1.ClusterStatus_builder{
+							Hub: "my-hub-id",
+						}.Build(),
+					}.Build(),
+				}.Build())
+				Expect(err).To(HaveOccurred())
+				status, ok := grpcstatus.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+				Expect(status.Message()).To(ContainSubstring("no template"))
+			})
+
 			It("Rejects changing catalog_item on update", func() {
 				createCatalogItem("cat-immut", true, nil)
 
