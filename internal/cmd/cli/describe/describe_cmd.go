@@ -19,6 +19,7 @@ import (
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/baremetalinstance"
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/cluster"
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/computeinstance"
+	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/externalip"
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/instancetype"
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/networkclass"
 	"github.com/osac-project/fulfillment-service/internal/cmd/cli/describe/publicip"
@@ -37,6 +38,7 @@ func Cmd() *cobra.Command {
 	result.AddCommand(baremetalinstance.Cmd())
 	result.AddCommand(cluster.Cmd())
 	result.AddCommand(computeinstance.Cmd())
+	result.AddCommand(externalip.Cmd())
 	result.AddCommand(instancetype.Cmd())
 	result.AddCommand(networkclass.Cmd())
 	result.AddCommand(publicip.Cmd())
