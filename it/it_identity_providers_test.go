@@ -25,6 +25,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	privatev1 "github.com/osac-project/fulfillment-service/internal/api/osac/private/v1"
+	publicv1 "github.com/osac-project/fulfillment-service/internal/api/osac/public/v1"
 	"github.com/osac-project/fulfillment-service/internal/controllers/finalizers"
 	"github.com/osac-project/fulfillment-service/internal/uuid"
 )
@@ -181,6 +182,66 @@ var _ = Describe("Identity provider lifecycle", func() {
 			fmt.Sprintf("/identity-provider/instances/%s", expectedAlias), nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(code).To(Equal(http.StatusNotFound))
+	})
+
+	It("Denies regular users and allows admin to create identity providers", func() {
+		userClient := publicv1.NewIdentityProvidersClient(tool.ExternalView().UserConn())
+		idpName := fmt.Sprintf("rbac-test-%s", uuid.New())
+
+		_, err := userClient.Create(ctx, publicv1.IdentityProvidersCreateRequest_builder{
+			Object: publicv1.IdentityProvider_builder{
+				Metadata: publicv1.Metadata_builder{
+					Name:   idpName,
+					Tenant: tenantName,
+				}.Build(),
+				Spec: publicv1.IdentityProviderSpec_builder{
+					Title:   "RBAC Test Provider",
+					Enabled: true,
+					Oidc: publicv1.OidcConfig_builder{
+						AuthorizationUrl: "https://oidc.example.com/authorize",
+						TokenUrl:         "https://oidc.example.com/token",
+						ClientId:         "test-client",
+						ClientSecret:     "test-secret",
+						Issuer:           "https://oidc.example.com",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).To(HaveOccurred())
+		status, ok := grpcstatus.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(status.Code()).To(SatisfyAny(
+			Equal(grpccodes.PermissionDenied),
+			Equal(grpccodes.Unauthenticated),
+		))
+
+		adminClient := publicv1.NewIdentityProvidersClient(tool.ExternalView().AdminConn())
+		adminIdpName := fmt.Sprintf("admin-rbac-%s", uuid.New())
+		createResponse, err := adminClient.Create(ctx, publicv1.IdentityProvidersCreateRequest_builder{
+			Object: publicv1.IdentityProvider_builder{
+				Metadata: publicv1.Metadata_builder{
+					Name:   adminIdpName,
+					Tenant: tenantName,
+				}.Build(),
+				Spec: publicv1.IdentityProviderSpec_builder{
+					Title:   "Admin RBAC Test Provider",
+					Enabled: true,
+					Oidc: publicv1.OidcConfig_builder{
+						AuthorizationUrl: "https://oidc.example.com/authorize",
+						TokenUrl:         "https://oidc.example.com/token",
+						ClientId:         "test-client",
+						ClientSecret:     "test-secret",
+						Issuer:           "https://oidc.example.com",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(func() {
+			_, _ = client.Delete(ctx, privatev1.IdentityProvidersDeleteRequest_builder{
+				Id: createResponse.GetObject().GetId(),
+			}.Build())
+		})
 	})
 
 	It("Enforces tenant isolation between identity providers", func() {
