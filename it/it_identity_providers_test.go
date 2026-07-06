@@ -408,6 +408,61 @@ var _ = Describe("Identity provider lifecycle", func() {
 		}
 	})
 
+	It("Rejects duplicate identity provider name within the same tenant", func() {
+		idpName := fmt.Sprintf("dup-test-%s", uuid.New())
+
+		createResponse, err := client.Create(ctx, privatev1.IdentityProvidersCreateRequest_builder{
+			Object: privatev1.IdentityProvider_builder{
+				Metadata: privatev1.Metadata_builder{
+					Name:   idpName,
+					Tenant: tenantName,
+				}.Build(),
+				Spec: privatev1.IdentityProviderSpec_builder{
+					Title:   "First Provider",
+					Enabled: true,
+					Oidc: privatev1.OidcConfig_builder{
+						AuthorizationUrl: "https://oidc.example.com/authorize",
+						TokenUrl:         "https://oidc.example.com/token",
+						ClientId:         "test-client",
+						ClientSecret:     "test-secret",
+						Issuer:           "https://oidc.example.com",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(func() {
+			_, _ = client.Delete(ctx, privatev1.IdentityProvidersDeleteRequest_builder{
+				Id: createResponse.GetObject().GetId(),
+			}.Build())
+		})
+
+		_, err = client.Create(ctx, privatev1.IdentityProvidersCreateRequest_builder{
+			Object: privatev1.IdentityProvider_builder{
+				Metadata: privatev1.Metadata_builder{
+					Name:   idpName,
+					Tenant: tenantName,
+				}.Build(),
+				Spec: privatev1.IdentityProviderSpec_builder{
+					Title:   "Duplicate Provider",
+					Enabled: true,
+					Oidc: privatev1.OidcConfig_builder{
+						AuthorizationUrl: "https://oidc.example.com/authorize",
+						TokenUrl:         "https://oidc.example.com/token",
+						ClientId:         "other-client",
+						ClientSecret:     "other-secret",
+						Issuer:           "https://oidc.example.com",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).To(HaveOccurred())
+		status, ok := grpcstatus.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(status.Code()).To(Equal(grpccodes.AlreadyExists),
+			"Duplicate name in same tenant should return AlreadyExists, got %v", status.Code())
+	})
+
 	It("Handles concurrent IdP creation across multiple tenants", func() {
 		tenantBName := fmt.Sprintf("idp-conc-b-%s", uuid.New())
 		createTenantBResp, err := tenantsClient.Create(ctx, privatev1.TenantsCreateRequest_builder{
