@@ -353,6 +353,62 @@ var _ = Describe("run", func() {
 			})
 		})
 
+		When("Tenant CRD exists on hub with missing labels", func() {
+			It("patches the labels onto the existing object", func() {
+				existing := &osacv1alpha1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespace1,
+						Name:      tenantID,
+					},
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(existing).
+					Build()
+
+				mockHubs.EXPECT().
+					List(gomock.Any(), gomock.Any()).
+					Return(&privatev1.HubsListResponse{
+						Size:  1,
+						Total: 1,
+						Items: []*privatev1.Hub{
+							privatev1.Hub_builder{Id: hub1ID}.Build(),
+						},
+					}, nil)
+
+				mockHubCache.EXPECT().
+					Get(gomock.Any(), hub1ID).
+					Return(&controllers.HubEntry{Namespace: namespace1, Client: fakeClient}, nil)
+
+				mockTenants.EXPECT().
+					Update(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, req *privatev1.TenantsUpdateRequest, opts ...grpc.CallOption) (*privatev1.TenantsUpdateResponse, error) {
+						return &privatev1.TenantsUpdateResponse{Object: req.GetObject()}, nil
+					}).AnyTimes()
+
+				tenant := privatev1.Tenant_builder{
+					Id: tenantID,
+					Metadata: privatev1.Metadata_builder{
+						Name:       tenantID,
+						Finalizers: []string{finalizers.Controller},
+						Tenant:     tenantName,
+					}.Build(),
+				}.Build()
+
+				f := newFunction(mockHubCache, mockHubs, mockTenants, mockProjects)
+				err := f.run(ctx, tenant)
+
+				Expect(err).ToNot(HaveOccurred())
+
+				patched := &osacv1alpha1.Tenant{}
+				Expect(fakeClient.Get(ctx, clnt.ObjectKey{
+					Namespace: namespace1,
+					Name:      tenantID,
+				}, patched)).To(Succeed())
+				Expect(patched.Labels).To(HaveKeyWithValue(labels.TenantUuid, tenantID))
+			})
+		})
+
 		When("tenant namespace already exists on a hub", func() {
 			It("does not create a duplicate namespace", func() {
 				existingNS := &corev1.Namespace{
@@ -406,6 +462,63 @@ var _ = Describe("run", func() {
 				nsList := &corev1.NamespaceList{}
 				Expect(fakeClient.List(ctx, nsList)).To(Succeed())
 				Expect(nsList.Items).To(HaveLen(1))
+			})
+		})
+
+		When("tenant namespace exists on hub with stale labels", func() {
+			It("patches the labels to match current state", func() {
+				existingNS := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: tenantID,
+						Labels: map[string]string{
+							labels.TenantRef: "old-value",
+							labels.Project:   "old-project",
+						},
+					},
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(existingNS).
+					Build()
+
+				mockHubs.EXPECT().
+					List(gomock.Any(), gomock.Any()).
+					Return(&privatev1.HubsListResponse{
+						Size:  1,
+						Total: 1,
+						Items: []*privatev1.Hub{
+							privatev1.Hub_builder{Id: hub1ID}.Build(),
+						},
+					}, nil)
+
+				mockHubCache.EXPECT().
+					Get(gomock.Any(), hub1ID).
+					Return(&controllers.HubEntry{Namespace: namespace1, Client: fakeClient}, nil)
+
+				mockTenants.EXPECT().
+					Update(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, req *privatev1.TenantsUpdateRequest, opts ...grpc.CallOption) (*privatev1.TenantsUpdateResponse, error) {
+						return &privatev1.TenantsUpdateResponse{Object: req.GetObject()}, nil
+					}).AnyTimes()
+
+				tenant := privatev1.Tenant_builder{
+					Id: tenantID,
+					Metadata: privatev1.Metadata_builder{
+						Name:       tenantID,
+						Finalizers: []string{finalizers.Controller},
+						Tenant:     tenantName,
+					}.Build(),
+				}.Build()
+
+				f := newFunction(mockHubCache, mockHubs, mockTenants, mockProjects)
+				err := f.run(ctx, tenant)
+
+				Expect(err).ToNot(HaveOccurred())
+
+				ns := &corev1.Namespace{}
+				Expect(fakeClient.Get(ctx, clnt.ObjectKey{Name: tenantID}, ns)).To(Succeed())
+				Expect(ns.Labels[labels.TenantRef]).To(Equal(tenantID))
+				Expect(ns.Labels[labels.Project]).To(Equal(namespace1))
 			})
 		})
 
