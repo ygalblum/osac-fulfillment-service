@@ -93,6 +93,9 @@ var _ = DescribeMigration("Create NAT gateways tables", func() {
 
 		err = insertNATGateway(ctx, "ng-2", "vn-1", "eip-2")
 		Expect(err).To(HaveOccurred())
+		var pgErr *pgconn.PgError
+		Expect(errors.As(err, &pgErr)).To(BeTrue())
+		Expect(pgErr.Code).To(Equal("23505"))
 	})
 
 	It("Allows same VirtualNetwork after soft delete", func(ctx context.Context) {
