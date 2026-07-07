@@ -328,8 +328,8 @@ allow if {
   input.auth.identity.authnMethod == "jwt"
   some group in subject_org_groups[tenant].groups
   group in {
-    sprintf("/%s/viewers", [name]),
-    sprintf("/%s/managers", [name]),
+    sprintf("/%s/system:viewers", [name]),
+    sprintf("/%s/system:managers", [name]),
   }
 }
 
@@ -343,7 +343,7 @@ allow if {
   name := input.context.context_extensions.name
   input.auth.identity.authnMethod == "jwt"
   some group in subject_org_groups[tenant].groups
-  group == sprintf("/%s/managers", [name])
+  group == sprintf("/%s/system:managers", [name])
 }
 
 # Subject construction:

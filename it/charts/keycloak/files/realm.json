@@ -859,6 +859,18 @@
         "claim.name" : "organization",
         "jsonType.label" : "String"
       }
+    }, {
+      "id" : "c4d5e6f7-8901-2345-6789-0123456789ab",
+      "name" : "organization groups",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-organization-group-membership-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
+        "access.token.claim" : "true"
+      }
     } ]
   }, {
     "id" : "ced65214-50b1-4c1b-9775-18fcbf5c27a6",
