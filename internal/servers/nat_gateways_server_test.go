@@ -139,6 +139,28 @@ var _ = Describe("Public NAT gateways server", func() {
 			Expect(listResp.GetItems()).To(HaveLen(3))
 		})
 
+		It("updates a NATGateway", func() {
+			vnID := createVirtualNetwork()
+			createResp, err := publicServer.Create(ctx, publicv1.NATGatewaysCreateRequest_builder{
+				Object: publicv1.NATGateway_builder{
+					Metadata: publicv1.Metadata_builder{Tenant: auth.SharedTenant}.Build(),
+					Spec: publicv1.NATGatewaySpec_builder{
+						VirtualNetwork: vnID,
+						ExternalIp:     "test-external-ip",
+					}.Build(),
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+
+			object := createResp.GetObject()
+			object.GetMetadata().SetName("updated-name")
+			updateResp, err := publicServer.Update(ctx, publicv1.NATGatewaysUpdateRequest_builder{
+				Object: object,
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(updateResp.GetObject().GetMetadata().GetName()).To(Equal("updated-name"))
+		})
+
 		It("deletes a NATGateway", func() {
 			vnID := createVirtualNetwork()
 			createResp, err := publicServer.Create(ctx, publicv1.NATGatewaysCreateRequest_builder{

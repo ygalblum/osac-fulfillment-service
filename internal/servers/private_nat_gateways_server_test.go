@@ -176,6 +176,27 @@ var _ = Describe("Private NAT gateways server", func() {
 			Expect(response.GetItems()).To(HaveLen(count))
 		})
 
+		It("updates NATGateway metadata", func() {
+			createResponse, err := natGatewaysServer.Create(ctx, privatev1.NATGatewaysCreateRequest_builder{
+				Object: privatev1.NATGateway_builder{
+					Metadata: privatev1.Metadata_builder{Tenant: auth.SharedTenant}.Build(),
+					Spec: privatev1.NATGatewaySpec_builder{
+						VirtualNetwork: vnID,
+						ExternalIp:     "test-external-ip",
+					}.Build(),
+				}.Build(),
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+
+			object := createResponse.GetObject()
+			object.GetMetadata().SetName("updated-name")
+			updateResponse, err := natGatewaysServer.Update(ctx, privatev1.NATGatewaysUpdateRequest_builder{
+				Object: object,
+			}.Build())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(updateResponse.GetObject().GetMetadata().GetName()).To(Equal("updated-name"))
+		})
+
 		It("soft deletes NATGateway", func() {
 			createResponse, err := natGatewaysServer.Create(ctx, privatev1.NATGatewaysCreateRequest_builder{
 				Object: privatev1.NATGateway_builder{
