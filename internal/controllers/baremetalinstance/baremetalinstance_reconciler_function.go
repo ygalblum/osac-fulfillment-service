@@ -138,14 +138,28 @@ func (r *function) run(ctx context.Context, bareMetalInstance *privatev1.BareMet
 		err = t.update(ctx)
 	}
 	if err != nil {
+		r.logger.ErrorContext(ctx, "BMI reconciliation function failed",
+			slog.String("id", bareMetalInstance.GetId()),
+			slog.Any("error", err))
 		return err
 	}
 	updateMask := r.maskCalculator.Calculate(oldBareMetalInstance, bareMetalInstance)
+	r.logger.DebugContext(ctx, "BMI reconciliation update",
+		slog.String("id", bareMetalInstance.GetId()),
+		slog.Any("mask", updateMask.GetPaths()),
+		slog.String("state", bareMetalInstance.GetStatus().GetState().String()),
+		slog.Bool("has_metadata", bareMetalInstance.HasMetadata()),
+		slog.Any("finalizers", bareMetalInstance.GetMetadata().GetFinalizers()))
 
 	_, err = r.bareMetalInstancesClient.Update(ctx, privatev1.BareMetalInstancesUpdateRequest_builder{
 		Object:     bareMetalInstance,
 		UpdateMask: updateMask,
 	}.Build())
+	if err != nil {
+		r.logger.ErrorContext(ctx, "BMI reconciliation API update failed",
+			slog.String("id", bareMetalInstance.GetId()),
+			slog.Any("error", err))
+	}
 
 	return err
 }
