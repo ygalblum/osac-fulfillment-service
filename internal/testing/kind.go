@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	bmfov1alpha1 "github.com/osac-project/bare-metal-fulfillment-operator/api/v1alpha1"
 	osacv1alpha1 "github.com/osac-project/osac-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -679,6 +680,9 @@ func (k *Kind) createKubeClient(ctx context.Context) error {
 	scheme := kubescheme.Scheme
 	if err = osacv1alpha1.AddToScheme(scheme); err != nil {
 		return fmt.Errorf("failed to add osac/v1alpha1 to scheme: %w", err)
+	}
+	if err = bmfov1alpha1.AddToScheme(scheme); err != nil {
+		return fmt.Errorf("failed to add bmfo/v1alpha1 to scheme: %w", err)
 	}
 	k.kubeClient, err = crclient.NewWithWatch(restConfig, crclient.Options{
 		Scheme: scheme,

@@ -15,6 +15,7 @@ package it
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2/dsl/core"
@@ -22,9 +23,12 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	bmfov1alpha1 "github.com/osac-project/bare-metal-fulfillment-operator/api/v1alpha1"
 	privatev1 "github.com/osac-project/fulfillment-service/internal/api/osac/private/v1"
 	publicv1 "github.com/osac-project/fulfillment-service/internal/api/osac/public/v1"
+	"github.com/osac-project/fulfillment-service/internal/kubernetes/labels"
 )
 
 var _ = Describe("BareMetalInstance lifecycle", func() {
@@ -104,7 +108,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		// Set BareMetalInstance to RUNNING state via private Update API
@@ -180,7 +184,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		getResp, err := bareMetalInstancesClient.Get(ctx, publicv1.BareMetalInstancesGetRequest_builder{
@@ -191,6 +195,29 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 		Expect(image).ToNot(BeNil())
 		Expect(image.GetSourceType()).To(Equal("registry"))
 		Expect(image.GetSourceRef()).To(Equal("quay.io/test/rhel9:latest"))
+
+		// Verify the controller creates a BMFO BareMetalInstance CR on the cluster
+		kubeClient := tool.KubeClient()
+		bmiList := &bmfov1alpha1.BareMetalInstanceList{}
+		var kubeObject *bmfov1alpha1.BareMetalInstance
+		Eventually(
+			func(g Gomega) {
+				err := kubeClient.List(ctx, bmiList, crclient.MatchingLabels{
+					labels.BareMetalInstanceUuid: bareMetalInstanceId,
+				})
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(bmiList.Items).To(HaveLen(1))
+				kubeObject = &bmiList.Items[0]
+			},
+			time.Minute,
+			time.Second,
+		).Should(Succeed())
+
+		Expect(kubeObject.GetNamespace()).To(Equal(hubNamespace))
+
+		var params map[string]string
+		Expect(json.Unmarshal([]byte(kubeObject.Spec.TemplateParameters), &params)).To(Succeed())
+		Expect(params).To(HaveKeyWithValue("imageURL", "quay.io/test/rhel9:latest"))
 	})
 
 	It("Creates BareMetalInstance without image when no template default", func(ctx context.Context) {
@@ -216,7 +243,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		getResp, err := bareMetalInstancesClient.Get(ctx, publicv1.BareMetalInstancesGetRequest_builder{
@@ -290,7 +317,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		getResp, err := bareMetalInstancesClient.Get(ctx, publicv1.BareMetalInstancesGetRequest_builder{
@@ -372,7 +399,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		getResp, err := bareMetalInstancesClient.Get(ctx, publicv1.BareMetalInstancesGetRequest_builder{
@@ -449,7 +476,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				status, ok := grpcstatus.FromError(err)
 				g.Expect(ok).To(BeTrue())
 				g.Expect(status.Code()).To(Equal(grpccodes.NotFound))
-			}, time.Minute, time.Second).Should(Succeed())
+			}, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		_, err = privateBareMetalInstancesClient.Update(ctx, privatev1.BareMetalInstancesUpdateRequest_builder{

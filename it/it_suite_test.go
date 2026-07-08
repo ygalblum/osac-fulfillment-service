@@ -131,6 +131,7 @@ var _ = BeforeSuite(func() {
 		AddCrdFile(filepath.Join("crds", "clusterorders.osac.openshift.io.yaml")).
 		AddCrdFile(filepath.Join("crds", "hostedclusters.hypershift.openshift.io.yaml")).
 		AddCrdFile(filepath.Join("crds", "tenants.osac.openshift.io.yaml")).
+		AddCrdFile(filepath.Join("crds", "osac.openshift.io_baremetalinstances.yaml")).
 		Build()
 	Expect(err).ToNot(HaveOccurred())
 	err = tool.Setup(ctx)
