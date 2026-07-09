@@ -17,7 +17,7 @@ name: Publish binaries
 on:
   push:
     tags:
-    - '*'
+    - 'v*'
 
 jobs:
 
