@@ -820,6 +820,7 @@ const (
 // by short message name so that public and private API variants are handled automatically.
 var platformScopedTypes = map[protoreflect.Name]bool{
 	"Capabilities":     true,
+	"ClusterVersion":   true,
 	"ConsoleSession":   true,
 	"ExternalIPPool":   true,
 	"HostType":         true,

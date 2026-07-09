@@ -20,6 +20,7 @@ import "osac/private/v1/baremetal_instance_template_type.proto";
 import "osac/private/v1/baremetal_instance_type.proto";
 import "osac/private/v1/cluster_catalog_item_type.proto";
 import "osac/private/v1/cluster_template_type.proto";
+import "osac/private/v1/cluster_version_type.proto";
 import "osac/private/v1/cluster_type.proto";
 import "osac/private/v1/compute_instance_catalog_item_type.proto";
 import "osac/private/v1/compute_instance_template_type.proto";
@@ -90,6 +91,7 @@ message Event {
     ExternalIP external_ip = 35;
     ExternalIPAttachment external_ip_attachment = 36;
     NATGateway nat_gateway = 37;
+    ClusterVersion cluster_version = 38;
   }
 }
 
