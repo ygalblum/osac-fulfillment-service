@@ -14,14 +14,14 @@ language governing permissions and limitations under the License.
 package servers
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 
+	privatev1 "github.com/osac-project/fulfillment-service/internal/api/osac/private/v1"
 	publicv1 "github.com/osac-project/fulfillment-service/internal/api/osac/public/v1"
 	"github.com/osac-project/fulfillment-service/internal/auth"
+	"github.com/osac-project/fulfillment-service/internal/database/dao"
 )
 
 var _ = Describe("Identity Providers Server", func() {
@@ -79,12 +79,28 @@ var _ = Describe("Identity Providers Server", func() {
 	Describe("CRUD operations", func() {
 		var (
 			publicServer *IdentityProvidersServer
-			ctx          context.Context
 		)
 
 		BeforeEach(func() {
 			var err error
-			ctx = context.Background()
+
+			// Identity providers require a real tenant (cannot use 'shared'). Create a tenant for tests:
+			tenantsDao, err := dao.NewGenericDAO[*privatev1.Tenant]().
+				SetLogger(logger).
+				SetTenancyLogic(tenancy).
+				Build()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = tenantsDao.Create().
+				SetObject(
+					privatev1.Tenant_builder{
+						Id: "test-tenant",
+						Metadata: privatev1.Metadata_builder{
+							Name:   "test-tenant",
+							Tenant: "test-tenant",
+						}.Build(),
+					}.Build(),
+				).Do(ctx)
+			Expect(err).ToNot(HaveOccurred())
 
 			publicServer, err = NewIdentityProvidersServer().
 				SetLogger(logger).
@@ -99,7 +115,7 @@ var _ = Describe("Identity Providers Server", func() {
 				Object: publicv1.IdentityProvider_builder{
 					Metadata: publicv1.Metadata_builder{
 						Name:   "test-idp",
-						Tenant: "tenant-1",
+						Tenant: "test-tenant",
 					}.Build(),
 					Spec: publicv1.IdentityProviderSpec_builder{
 						Title:   "Test Identity Provider",
@@ -133,7 +149,7 @@ var _ = Describe("Identity Providers Server", func() {
 					Object: publicv1.IdentityProvider_builder{
 						Metadata: publicv1.Metadata_builder{
 							Name:   name,
-							Tenant: "tenant-1",
+							Tenant: "test-tenant",
 						}.Build(),
 						Spec: publicv1.IdentityProviderSpec_builder{
 							Title:   "Test IDP " + name,
@@ -151,10 +167,7 @@ var _ = Describe("Identity Providers Server", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 
-			filter := "metadata.tenant == 'tenant-1'"
-			listResp, err := publicServer.List(ctx, publicv1.IdentityProvidersListRequest_builder{
-				Filter: &filter,
-			}.Build())
+			listResp, err := publicServer.List(ctx, publicv1.IdentityProvidersListRequest_builder{}.Build())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(listResp.GetItems()).To(HaveLen(3))
 		})
@@ -164,7 +177,7 @@ var _ = Describe("Identity Providers Server", func() {
 				Object: publicv1.IdentityProvider_builder{
 					Metadata: publicv1.Metadata_builder{
 						Name:   "test-idp",
-						Tenant: "tenant-1",
+						Tenant: "test-tenant",
 					}.Build(),
 					Spec: publicv1.IdentityProviderSpec_builder{
 						Title:   "Original Title",
@@ -195,7 +208,7 @@ var _ = Describe("Identity Providers Server", func() {
 				Object: publicv1.IdentityProvider_builder{
 					Metadata: publicv1.Metadata_builder{
 						Name:   "test-idp",
-						Tenant: "tenant-1",
+						Tenant: "test-tenant",
 					}.Build(),
 					Spec: publicv1.IdentityProviderSpec_builder{
 						Title:   "Test IDP",
