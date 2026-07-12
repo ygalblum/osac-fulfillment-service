@@ -572,6 +572,7 @@ func (t *task) mutateBMI(ctx context.Context, object *bmfov1alpha1.BareMetalInst
 	object.Spec.TemplateID = catalogItemResp.GetObject().GetTemplate()
 	object.Spec.TemplateParameters = ""
 	object.Spec.RunStrategy = bmfov1alpha1.RunStrategyUnspecified
+	object.Spec.RestartTrigger = t.bareMetalInstance.GetSpec().GetRestartTrigger()
 
 	params := map[string]any{}
 
