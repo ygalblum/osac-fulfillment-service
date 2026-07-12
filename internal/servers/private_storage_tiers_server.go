@@ -136,7 +136,9 @@ func (s *PrivateStorageTiersServer) Create(ctx context.Context,
 	}
 
 	st := request.GetObject()
-	st.SetState(privatev1.StorageTierState_STORAGE_TIER_STATE_ACTIVE)
+	st.SetStatus(privatev1.StorageTierStatus_builder{
+		State: privatev1.StorageTierState_STORAGE_TIER_STATE_ACTIVE,
+	}.Build())
 
 	st.SetId("")
 
@@ -198,9 +200,9 @@ func (s *PrivateStorageTiersServer) validateStorageTierCreate(ctx context.Contex
 	if st.GetMetadata() == nil || st.GetMetadata().GetName() == "" {
 		return grpcstatus.Errorf(grpccodes.InvalidArgument, "field 'metadata.name' is required")
 	}
-	backends := st.GetBackends()
+	backends := st.GetSpec().GetBackends()
 	if len(backends) == 0 {
-		return grpcstatus.Errorf(grpccodes.InvalidArgument, "field 'backends' is required and must not be empty")
+		return grpcstatus.Errorf(grpccodes.InvalidArgument, "field 'spec.backends' is required and must not be empty")
 	}
 	return s.validateBackends(ctx, backends)
 }
@@ -215,12 +217,12 @@ func (s *PrivateStorageTiersServer) validateStorageTierUpdate(ctx context.Contex
 			"field 'metadata.name' is immutable and cannot be changed from '%s' to '%s'",
 			existingST.GetMetadata().GetName(), newST.GetMetadata().GetName())
 	}
-	backends := newST.GetBackends()
+	backends := newST.GetSpec().GetBackends()
 	if updateMask != nil {
 		for _, path := range updateMask.GetPaths() {
-			if path == "backends" && len(backends) == 0 {
+			if path == "spec.backends" && len(backends) == 0 {
 				return grpcstatus.Errorf(grpccodes.InvalidArgument,
-					"field 'backends' is required and must not be empty")
+					"field 'spec.backends' is required and must not be empty")
 			}
 		}
 	}

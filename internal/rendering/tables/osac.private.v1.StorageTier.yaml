@@ -20,11 +20,11 @@ columns:
   value: "has(this.metadata.name)? this.metadata.name: '-'"
 
 - header: DESCRIPTION
-  value: "has(this.description) && this.description != ''? this.description: '-'"
+  value: "has(this.spec.description) && this.spec.description != ''? this.spec.description: '-'"
 
 - header: BACKENDS
-  value: "has(this.backends)? string(this.backends.size()): '0'"
+  value: "has(this.spec.backends)? string(this.spec.backends.size()): '0'"
 
 - header: STATE
-  value: this.state
+  value: this.status.state
   type: osac.private.v1.StorageTierState

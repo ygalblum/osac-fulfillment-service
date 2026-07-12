@@ -91,14 +91,14 @@ func renderStorageTier(w io.Writer, st *privatev1.StorageTier) {
 	fmt.Fprintf(writer, "ID:\t%s\n", st.GetId())
 	fmt.Fprintf(writer, "Name:\t%s\n", st.GetMetadata().GetName())
 
-	state := strings.TrimPrefix(st.GetState().String(), "STORAGE_TIER_STATE_")
+	state := strings.TrimPrefix(st.GetStatus().GetState().String(), "STORAGE_TIER_STATE_")
 	fmt.Fprintf(writer, "State:\t%s\n", state)
 
-	if desc := st.GetDescription(); desc != "" {
+	if desc := st.GetSpec().GetDescription(); desc != "" {
 		fmt.Fprintf(writer, "Description:\t%s\n", desc)
 	}
 
-	backends := st.GetBackends()
+	backends := st.GetSpec().GetBackends()
 	if len(backends) > 0 {
 		for i, ba := range backends {
 			if i > 0 {

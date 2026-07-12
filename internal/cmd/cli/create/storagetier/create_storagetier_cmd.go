@@ -134,17 +134,19 @@ func (c *runnerContext) run(cmd *cobra.Command, args []string) error {
 		Metadata: privatev1.Metadata_builder{
 			Name: c.name,
 		}.Build(),
-		Description: c.description,
-		Backends: []*privatev1.BackendAssociation{
-			privatev1.BackendAssociation_builder{
-				BackendId:            c.backendID,
-				Protocol:             protocolValue,
-				MaxReadBandwidthMbs:  c.maxReadBandwidthMbs,
-				MaxWriteBandwidthMbs: c.maxWriteBandwidthMbs,
-				QuotaGib:             c.quotaGiB,
-				EncryptionEnabled:    c.encryptionEnabled,
-			}.Build(),
-		},
+		Spec: privatev1.StorageTierSpec_builder{
+			Description: c.description,
+			Backends: []*privatev1.BackendAssociation{
+				privatev1.BackendAssociation_builder{
+					BackendId:            c.backendID,
+					Protocol:             protocolValue,
+					MaxReadBandwidthMbs:  c.maxReadBandwidthMbs,
+					MaxWriteBandwidthMbs: c.maxWriteBandwidthMbs,
+					QuotaGib:             c.quotaGiB,
+					EncryptionEnabled:    c.encryptionEnabled,
+				}.Build(),
+			},
+		}.Build(),
 	}.Build()
 
 	response, err := client.Create(ctx, privatev1.StorageTiersCreateRequest_builder{

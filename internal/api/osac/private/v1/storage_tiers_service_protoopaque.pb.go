@@ -192,7 +192,7 @@ type StorageTiersListRequest_builder struct {
 	// expression evaluates to `true` the object is included in the results. For example, to retrieve all storage tiers
 	// with a specific state:
 	//
-	//	this.state == 1
+	//	this.status.state == 1
 	//
 	// If this isn't provided, or if the value is empty, then all the storage tiers that the user has permission to see
 	// will be returned. Not all CEL constructs are currently supported for implementation reasons; see the filter
@@ -204,7 +204,7 @@ type StorageTiersListRequest_builder struct {
 	// names of the attributes of the storage tier instead of the names of the columns of a table. For example, in
 	// order to sort the storage tiers descending by description the value should be:
 	//
-	//	description desc
+	//	spec.description desc
 	//
 	// If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
 	Order *string

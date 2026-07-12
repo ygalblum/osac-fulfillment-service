@@ -75,12 +75,27 @@ message StorageTier {
   // Metadata of the storage tier.
   Metadata metadata = 2;
 
+  // Desired configuration of the storage tier (admin-modifiable).
+  StorageTierSpec spec = 3;
+
+  // Current operational status of the storage tier.
+  StorageTierStatus status = 4;
+}
+
+// Defines the desired configuration for a StorageTier.
+message StorageTierSpec {
   // Human-readable description of the storage tier.
-  string description = 3;
+  string description = 1;
 
   // List of backend associations that compose this storage tier.
-  repeated BackendAssociation backends = 4;
+  repeated BackendAssociation backends = 2;
+}
 
+// Represents the current operational state of a StorageTier.
+message StorageTierStatus {
   // Current lifecycle state of the storage tier.
-  StorageTierState state = 5;
+  StorageTierState state = 1;
+
+  // Human-readable message providing additional details about the current state.
+  optional string message = 2;
 }
