@@ -981,7 +981,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC with defaults",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).ToNot(HaveOccurred())
@@ -1100,7 +1100,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC invalid VN CIDR",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1117,7 +1117,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC invalid subnet CIDR",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1134,7 +1134,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC subnet outside VN",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1150,7 +1150,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC subnet without VN",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1172,7 +1172,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC invalid rule protocol",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1194,7 +1194,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC TCP missing port_to",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1215,7 +1215,7 @@ var _ = Describe("Network classes server", func() {
 						Title:                  "NC invalid rule CIDR",
 						ImplementationStrategy: "ovn-kubernetes",
 						FabricManager:          "netris",
-						Spec: privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
+						Spec:                   privatev1.NetworkClassSpec_builder{Defaults: defaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).To(HaveOccurred())
@@ -1265,9 +1265,9 @@ var _ = Describe("Network classes server", func() {
 				}.Build()
 				_, err := publicServer.Update(ctx, publicv1.NetworkClassesUpdateRequest_builder{
 					Object: publicv1.NetworkClass_builder{
-						Id:       nc.GetId(),
-						Title:    nc.GetTitle(),
-						Spec: publicv1.NetworkClassSpec_builder{Defaults: publicDefaults}.Build(),
+						Id:    nc.GetId(),
+						Title: nc.GetTitle(),
+						Spec:  publicv1.NetworkClassSpec_builder{Defaults: publicDefaults}.Build(),
 					}.Build(),
 				}.Build())
 				Expect(err).ToNot(HaveOccurred())
