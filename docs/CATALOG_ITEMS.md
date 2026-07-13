@@ -26,10 +26,10 @@ in two ways:
 
 - `osac create cluster --template <id>` — direct template access, no field restrictions. Supports
   `--template-parameter` to pass custom values (e.g., `vpc_id`, `vlan`) that AAP uses for
-  provisioning
+  provisioning.
 - `osac create cluster --catalog-item <id>` — the server resolves the template from the catalog
   item and applies `field_definitions` to enforce defaults and validation. Only the fixed set of
-  known fields can be controlled; custom template parameters are not supported
+  known fields can be controlled; custom template parameters are not supported.
 
 Both templates and catalog items are created and managed by the platform admin through the private
 API. The distinction is not one of roles but of purpose: templates define what infrastructure
@@ -52,9 +52,9 @@ Custom provisioning parameters (like `vpc_id`, `ip_block_id`, `ssh_key_group_id`
 with `--template-parameter` and forwarded to AAP as extra variables. However, `--template-parameter`
 is **not supported with `--catalog-item`**, which means:
 
-- Catalog items work well with templates that only need the standard spec fields
+- Catalog items work well with templates that only need the standard spec fields.
 - Templates that require custom parameters (e.g., `osac.templates.ocp_4_20_small_nico`) cannot be
-  fully used through catalog items — users must use `--template` directly instead
+  fully used through catalog items — users must use `--template` directly instead.
 
 ## Creating Catalog Items
 
@@ -139,17 +139,39 @@ field_definitions:
     display_name: SSH Key
     editable: true
     default: "ssh-ed25519 AAAA..."
-  - path: cores
-    display_name: CPU Cores
+  - path: image.source_type
+    default: registry
+    display_name: Image Source Type
+  - path: image.source_ref
+    default: quay.io/containerdisks/fedora:latest
+    display_name: Image Reference
+  - path: boot_disk.size_gib
+    default: 20
+    display_name: Boot Disk Size (GiB)
     editable: true
-    default: 4
-  - path: memory_gib
-    display_name: Memory (GiB)
+  - path: instance_type
+    display_name: Instance Type
     editable: true
-    default: 8
+  - path: run_strategy
+    display_name: Run Strategy
+    editable: true
   - path: network_attachments
     display_name: Network Attachments
     editable: true
+```
+> IMPORTANT: Notice that ComputeInstanceCatalogItem uses instance type. So, in order to use it you'll need to have an instance type. For example:
+
+```yaml
+'@type': type.googleapis.com/osac.private.v1.InstanceType
+id: simple-1-2
+metadata:
+  creator: system
+  name: simple-1-2
+  tenant: shared
+spec:
+  cores: 1
+  memory_gib: 2
+  state: INSTANCE_TYPE_STATE_ACTIVE
 ```
 
 ### Create the catalog item
@@ -198,8 +220,7 @@ catalog item, the server rejects any spec field not listed in `field_definitions
 | Path | Description |
 |------|-------------|
 | `ssh_key` | SSH public key |
-| `cores` | Number of CPU cores |
-| `memory_gib` | Memory in GiB |
+| `instance_type` | Instance Type includes number of CPU cores, memory, etc. |
 | `run_strategy` | VM run strategy (e.g., `Always`, `Halted`) |
 | `user_data` | Cloud-init or ignition user data |
 | `image.source_type` | Image source type (e.g., `registry`) |
@@ -247,8 +268,8 @@ the server applies `field_definitions` **after** receiving the request, which me
   `validation_schema` if one is defined.
 - If an editable field is **not provided** by the user, the catalog item's default is applied.
 
-For example, given a catalog item with `ssh_public_key` set as non-editable with a fixed default,
-running `--ssh-public-key "my-key"` results in an error — the user cannot override locked fields.
+For example, given a catalog item with `release_image` set as non-editable with a fixed default,
+running `--release-image "quay.io/user1/ocp-release:4.12.0"` results in an error — the user cannot override locked fields.
 
 ### Server-side processing
 
