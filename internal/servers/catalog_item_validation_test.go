@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	privatev1 "github.com/osac-project/fulfillment-service/internal/api/osac/private/v1"
@@ -64,7 +65,7 @@ var _ = Describe("applyFieldDefinitions", func() {
 		Expect(spec.GetPullSecret()).To(Equal("default-secret"))
 	})
 
-	It("overrides user value with default for non-editable field", func() {
+	It("rejects user value for non-editable field", func() {
 		userValue := "user-value"
 		spec := &privatev1.ClusterSpec{
 			PullSecret: &userValue,
@@ -77,8 +78,40 @@ var _ = Describe("applyFieldDefinitions", func() {
 			Default:  defaultVal,
 		}}
 		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		Expect(err.Error()).To(ContainSubstring("not editable"))
+	})
+
+	It("applies default for non-editable field when user provides no value", func() {
+		spec := &privatev1.ClusterSpec{}
+		defaultVal, err := structpb.NewValue("admin-value")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "pull_secret",
+			Editable: false,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(spec.GetPullSecret()).To(Equal("admin-value"))
+	})
+
+	It("happy path: editable value preserved and non-editable default applied", func() {
+		sshKey := "ssh-ed25519 USER_KEY"
+		spec := &privatev1.ClusterSpec{
+			SshPublicKey: &sshKey,
+		}
+		defaultRelease, err := structpb.NewValue("quay.io/ocp:4.16")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{
+			{Path: "ssh_public_key", Editable: true},
+			{Path: "release_image", Editable: false, Default: defaultRelease},
+		}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(spec.GetSshPublicKey()).To(Equal("ssh-ed25519 USER_KEY"))
+		Expect(spec.GetReleaseImage()).To(Equal("quay.io/ocp:4.16"))
 	})
 
 	It("returns no error for empty field definitions", func() {
@@ -132,11 +165,8 @@ var _ = Describe("applyFieldDefinitions", func() {
 		Expect(spec.GetIsWindows()).To(BeTrue())
 	})
 
-	It("forces is_windows value for non-editable field definition", func() {
-		falseVal := false
-		spec := &privatev1.ComputeInstanceSpec{
-			IsWindows: &falseVal,
-		}
+	It("applies non-editable default for bool field is_windows on compute instance spec", func() {
+		spec := &privatev1.ComputeInstanceSpec{}
 		defaultVal, err := structpb.NewValue(true)
 		Expect(err).ToNot(HaveOccurred())
 		fieldDefs := []*privatev1.FieldDefinition{{
@@ -147,6 +177,146 @@ var _ = Describe("applyFieldDefinitions", func() {
 		err = applyFieldDefinitions(spec, fieldDefs)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(spec.GetIsWindows()).To(BeTrue())
+	})
+})
+
+var _ = Describe("applyFieldDefinitions rejects unlisted fields", func() {
+	It("rejects a single unlisted field on ClusterSpec", func() {
+		pullSecret := "my-secret"
+		spec := &privatev1.ClusterSpec{
+			PullSecret: &pullSecret,
+		}
+		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "ssh_public_key",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		Expect(err.Error()).To(ContainSubstring("pull_secret"))
+		Expect(err.Error()).To(ContainSubstring("not allowed"))
+	})
+
+	It("rejects multiple unlisted fields on ClusterSpec", func() {
+		pullSecret := "my-secret"
+		releaseImage := "quay.io/ocp:4.21"
+		spec := &privatev1.ClusterSpec{
+			PullSecret:   &pullSecret,
+			ReleaseImage: &releaseImage,
+		}
+		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "ssh_public_key",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		Expect(err.Error()).To(ContainSubstring("pull_secret"))
+		Expect(err.Error()).To(ContainSubstring("release_image"))
+	})
+
+	It("accepts when all fields are covered by field_definitions", func() {
+		pullSecret := "my-secret"
+		sshKey := "ssh-ed25519 AAAA"
+		spec := &privatev1.ClusterSpec{
+			PullSecret:   &pullSecret,
+			SshPublicKey: &sshKey,
+		}
+		fieldDefs := []*privatev1.FieldDefinition{
+			{Path: "pull_secret", Editable: true},
+			{Path: "ssh_public_key", Editable: true},
+		}
+		err := applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("always allows catalog_item without a field_definition", func() {
+		spec := privatev1.ClusterSpec_builder{
+			CatalogItem: "cat-123",
+		}.Build()
+		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "ssh_public_key",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("always allows template without a field_definition", func() {
+		spec := privatev1.ClusterSpec_builder{
+			Template: "my-template",
+		}.Build()
+		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "ssh_public_key",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("parent field_definition covers nested children", func() {
+		spec := privatev1.ClusterSpec_builder{
+			Network: privatev1.ClusterNetwork_builder{
+				PodCidr:     proto.String("10.128.0.0/14"),
+				ServiceCidr: proto.String("172.30.0.0/16"),
+			}.Build(),
+		}.Build()
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "network",
+			Editable: true,
+		}}
+		err := applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("rejects unlisted field before checking non-editable override", func() {
+		pullSecret := "user-override"
+		spec := &privatev1.ClusterSpec{
+			PullSecret: &pullSecret,
+		}
+		defaultVal, err := structpb.NewValue("admin-value")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "release_image",
+			Editable: false,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		Expect(err.Error()).To(ContainSubstring("not allowed"))
+		Expect(err.Error()).To(ContainSubstring("pull_secret"))
+	})
+
+	It("rejects unlisted field on ComputeInstanceSpec", func() {
+		cores := int32(4)
+		spec := &privatev1.ComputeInstanceSpec{
+			Cores: &cores,
+		}
+		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "ssh_key",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).To(HaveOccurred())
+		Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
+		Expect(err.Error()).To(ContainSubstring("cores"))
+		Expect(err.Error()).To(ContainSubstring("not allowed"))
 	})
 })
 

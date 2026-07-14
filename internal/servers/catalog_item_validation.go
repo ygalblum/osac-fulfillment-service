@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,8 +67,9 @@ type catalogItem interface {
 	GetMetadata() *privatev1.Metadata
 }
 
-// applyFieldDefinitions processes field definitions from a catalog item against a resource spec.
-// For non-editable fields: overrides user-provided values with the catalog item default.
+// applyFieldDefinitions validates and applies field definitions from a catalog item against a resource spec.
+// Rejects any spec field not listed in field_definitions (except system fields catalog_item, template and template_parameters).
+// For non-editable fields: rejects user-provided values; applies the catalog item default.
 // For editable fields with user values: validates against the JSON Schema.
 // For editable fields without user values: applies the catalog item default.
 func applyFieldDefinitions(
@@ -89,6 +91,28 @@ func applyFieldDefinitions(
 		return grpcstatus.Errorf(grpccodes.Internal, "failed to parse spec: %v", err)
 	}
 
+	allowedPaths := map[string]bool{
+		"catalog_item":        true,
+		"template":            true,
+		"template_parameters": true,
+	}
+	for _, fd := range fieldDefinitions {
+		if fd.GetPath() != "" {
+			allowedPaths[fd.GetPath()] = true
+		}
+	}
+	var unlisted []string
+	for _, path := range collectLeafPaths(specMap, "") {
+		if !isPathCovered(path, allowedPaths) {
+			unlisted = append(unlisted, path)
+		}
+	}
+	if len(unlisted) > 0 {
+		slices.Sort(unlisted)
+		return grpcstatus.Errorf(grpccodes.InvalidArgument,
+			"fields not allowed by catalog item: %s", strings.Join(unlisted, ", "))
+	}
+
 	compiler := jsonschema.NewCompiler()
 
 	for _, fd := range fieldDefinitions {
@@ -104,6 +128,10 @@ func applyFieldDefinitions(
 			if defaultVal == nil {
 				return grpcstatus.Errorf(grpccodes.Internal,
 					"catalog item misconfigured: non-editable field '%s' has no default value", path)
+			}
+			if userHasValue && userVal != nil {
+				return grpcstatus.Errorf(grpccodes.InvalidArgument,
+					"field '%s' is not editable", path)
 			}
 			if err := applyDefault(specMap, path, defaultVal); err != nil {
 				return err
@@ -232,6 +260,34 @@ func setNestedValue(m map[string]any, path string, value any) {
 		}
 		current = currentMap
 	}
+}
+
+func collectLeafPaths(m map[string]any, prefix string) []string {
+	var paths []string
+	for key, val := range m {
+		fullPath := key
+		if prefix != "" {
+			fullPath = prefix + "." + key
+		}
+		if nested, ok := val.(map[string]any); ok {
+			paths = append(paths, collectLeafPaths(nested, fullPath)...)
+		} else {
+			paths = append(paths, fullPath)
+		}
+	}
+	return paths
+}
+
+func isPathCovered(path string, allowedPaths map[string]bool) bool {
+	if allowedPaths[path] {
+		return true
+	}
+	for i := range path {
+		if path[i] == '.' && allowedPaths[path[:i]] {
+			return true
+		}
+	}
+	return false
 }
 
 // validateInstanceTypeState looks up an instance type by name and validates its state.
