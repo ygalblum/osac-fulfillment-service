@@ -31,6 +31,8 @@ import "osac/private/v1/security_group_type.proto";
 // Users query available NetworkClasses to discover which network implementation strategies they can choose when
 // creating VirtualNetworks. The `implementation_strategy` field is the key identifier that VirtualNetwork resources
 // reference to select their network backend.
+//
+// buf:lint:ignore OSAC_OBJECT_SHAPE
 message NetworkClass {
   // Unique identifier of the network class.
   string id = 1;
