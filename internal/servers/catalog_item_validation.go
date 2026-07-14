@@ -67,6 +67,26 @@ type catalogItem interface {
 	GetMetadata() *privatev1.Metadata
 }
 
+// validateFieldDefinitions checks that field definitions are well-formed:
+//   - Non-editable fields must have a default value.
+//   - Fields with a validation_schema must contain valid JSON.
+func validateFieldDefinitions(fieldDefinitions []*privatev1.FieldDefinition) error {
+	for _, fd := range fieldDefinitions {
+		if !fd.GetEditable() && !fd.HasDefault() {
+			return grpcstatus.Errorf(grpccodes.InvalidArgument,
+				"non-editable field '%s' must have a default value", fd.GetPath())
+		}
+		if schema := fd.GetValidationSchema(); schema != "" {
+			var doc any
+			if err := json.Unmarshal([]byte(schema), &doc); err != nil {
+				return grpcstatus.Errorf(grpccodes.InvalidArgument,
+					"field '%s' has invalid validation_schema: %v", fd.GetPath(), err)
+			}
+		}
+	}
+	return nil
+}
+
 // applyFieldDefinitions validates and applies field definitions from a catalog item against a resource spec.
 // Rejects any spec field not listed in field_definitions (except system fields catalog_item, template and template_parameters).
 // For non-editable fields: rejects user-provided values; applies the catalog item default.
@@ -125,10 +145,6 @@ func applyFieldDefinitions(
 		userVal, userHasValue := getNestedValue(specMap, path)
 
 		if !fd.GetEditable() {
-			if defaultVal == nil {
-				return grpcstatus.Errorf(grpccodes.Internal,
-					"catalog item misconfigured: non-editable field '%s' has no default value", path)
-			}
 			if userHasValue && userVal != nil {
 				return grpcstatus.Errorf(grpccodes.InvalidArgument,
 					"field '%s' is not editable", path)
