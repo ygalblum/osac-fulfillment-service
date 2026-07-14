@@ -82,6 +82,18 @@ func Cmd() *cobra.Command {
 		"registry",
 		imageSourceTypeFlagHelp,
 	)
+	flags.StringVar(
+		&runner.args.externalIP,
+		"external-ip",
+		"",
+		externalIPFlagHelp,
+	)
+	flags.StringVar(
+		&runner.args.natGateway,
+		"nat-gateway",
+		"",
+		natGatewayFlagHelp,
+	)
 
 	if err := result.MarkFlagRequired("catalog-item"); err != nil {
 		panic(fmt.Sprintf("failed to mark catalog-item flag as required: %v", err))
@@ -98,6 +110,8 @@ type runnerContext struct {
 		runStrategy     string
 		imageSourceRef  string
 		imageSourceType string
+		externalIP      string
+		natGateway      string
 	}
 	logger *slog.Logger
 }
@@ -145,6 +159,26 @@ func (c *runnerContext) run(cmd *cobra.Command, _ []string) error {
 		}
 		rs := publicv1.BareMetalInstanceRunStrategy(val)
 		spec.RunStrategy = &rs
+	}
+	if c.args.externalIP != "" {
+		val, ok := publicv1.ExternalIPMode_value["EXTERNAL_IP_MODE_"+strings.ToUpper(c.args.externalIP)]
+		if !ok {
+			return fmt.Errorf(
+				"unknown external IP mode %q, valid values are none and auto",
+				c.args.externalIP,
+			)
+		}
+		spec.ExternalIpMode = publicv1.ExternalIPMode(val)
+	}
+	if c.args.natGateway != "" {
+		val, ok := publicv1.NATGatewayMode_value["NAT_GATEWAY_MODE_"+strings.ToUpper(c.args.natGateway)]
+		if !ok {
+			return fmt.Errorf(
+				"unknown NAT gateway mode %q, valid values are none and auto",
+				c.args.natGateway,
+			)
+		}
+		spec.NatGatewayMode = publicv1.NATGatewayMode(val)
 	}
 
 	bmi := publicv1.BareMetalInstance_builder{
@@ -202,4 +236,18 @@ _URL_ - Image reference, for example an OCI image URL.
 
 const imageSourceTypeFlagHelp = `
 _TYPE_ - Image source type.
+`
+
+const externalIPFlagHelp = `
+_MODE_ - Controls auto-provisioning of ExternalIP. Valid values are
+{{ bt }}none{{ bt }} (no auto-provisioning) and {{ bt }}auto{{ bt }}
+(auto-select pool and create ExternalIP with attachment). Immutable
+after creation.
+`
+
+const natGatewayFlagHelp = `
+_MODE_ - Controls auto-provisioning of NATGateway. Valid values are
+{{ bt }}none{{ bt }} (no auto-provisioning) and {{ bt }}auto{{ bt }}
+(auto-provision NATGateway for outbound connectivity). Immutable
+after creation.
 `
