@@ -758,19 +758,16 @@ func (s *PrivateClustersServer) validateAndTransformCatalogItem(ctx context.Cont
 	}
 
 	templateRef := catalogItem.GetTemplate()
-	if templateRef != "" {
-		cluster.GetSpec().SetTemplate(templateRef)
+	if templateRef == "" {
+		return grpcstatus.Errorf(grpccodes.InvalidArgument, "catalog item '%s' has no template", catalogItemRef)
 	}
+	cluster.GetSpec().SetTemplate(templateRef)
 
 	if err := applyFieldDefinitions(cluster.GetSpec(), catalogItem.GetFieldDefinitions()); err != nil {
 		return err
 	}
 
 	// Look up the template to apply spec defaults, node sets, and parameter validation:
-	templateRef = cluster.GetSpec().GetTemplate()
-	if templateRef == "" {
-		return grpcstatus.Errorf(grpccodes.InvalidArgument, "catalog item has no template")
-	}
 	template, err := s.lookupTemplate(ctx, templateRef)
 	if err != nil {
 		return err
@@ -809,7 +806,6 @@ func (s *PrivateClustersServer) validateAndTransformCatalogItem(ctx context.Cont
 	)
 	cluster.GetSpec().SetTemplateParameters(actualClusterParameters)
 
-	cluster.GetSpec().SetTemplate(template.GetId())
 	for _, clusterNodeSet := range cluster.GetSpec().GetNodeSets() {
 		hostTypeRef := clusterNodeSet.GetHostType()
 		hostType := hostTypes[hostTypeRef]
