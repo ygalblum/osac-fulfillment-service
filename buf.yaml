@@ -17,12 +17,16 @@ version: v2
 lint:
   use:
   - STANDARD
+  - OSAC_OBJECT_SHAPE
   except:
   - SERVICE_SUFFIX
 
 breaking:
   use:
   - FILE
+
+plugins:
+- plugin: bin/buf-plugin-osac-lint
 
 modules:
 

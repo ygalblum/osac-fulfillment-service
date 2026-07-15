@@ -17,6 +17,7 @@ package osac.private.v1;
 
 import "osac/private/v1/metadata_type.proto";
 
+// buf:lint:ignore OSAC_OBJECT_SHAPE
 message HostType {
   string id = 1;
   Metadata metadata = 2;

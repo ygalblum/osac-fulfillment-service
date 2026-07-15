@@ -100,6 +100,8 @@ func (x NetworkClassState) Number() protoreflect.EnumNumber {
 //
 // Users query available NetworkClasses to discover which network types they can choose when
 // creating VirtualNetworks.
+//
+// buf:lint:ignore OSAC_OBJECT_SHAPE
 type NetworkClass struct {
 	state protoimpl.MessageState `protogen:"hybrid.v1"`
 	// Unique identifier of the network class.
