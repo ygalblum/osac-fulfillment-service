@@ -56,7 +56,7 @@ const (
 	// The cluster deletion has failed.
 	//
 	// The deprovision operation encountered an error and could not complete.
-	// The status.message field will contain specific error details.
+	// The status conditions will contain specific error details.
 	ClusterState_CLUSTER_STATE_DELETE_FAILED ClusterState = 5
 )
 

@@ -284,7 +284,7 @@ enum ClusterState {
   // The cluster deletion has failed.
   //
   // The deprovision operation encountered an error and could not complete.
-  // The status.message field will contain specific error details.
+  // The status conditions will contain specific error details.
   CLUSTER_STATE_DELETE_FAILED = 5;
 }
 
