@@ -1234,7 +1234,7 @@ var _ = Describe("Private clusters server", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 
-			It("Creates cluster with catalog item", func() {
+			It("Creates cluster with catalog item and populates node sets from template", func() {
 				createCatalogItem("cat-happy", true, nil)
 
 				response, err := server.Create(ctx, privatev1.ClustersCreateRequest_builder{
@@ -1254,6 +1254,16 @@ var _ = Describe("Private clusters server", func() {
 				Expect(object.GetId()).ToNot(BeEmpty())
 				Expect(object.GetSpec().GetTemplate()).To(Equal("my-template-id"))
 				Expect(object.GetSpec().GetCatalogItem()).To(Equal("cat-happy"))
+
+				// Verify node sets are populated from the template:
+				nodeSets := object.GetSpec().GetNodeSets()
+				Expect(nodeSets).To(HaveLen(2))
+				Expect(nodeSets).To(HaveKey("compute"))
+				Expect(nodeSets["compute"].GetHostType()).To(Equal("acme-1ti-id"))
+				Expect(nodeSets["compute"].GetSize()).To(Equal(int32(3)))
+				Expect(nodeSets).To(HaveKey("gpu"))
+				Expect(nodeSets["gpu"].GetHostType()).To(Equal("acme-gpu-id"))
+				Expect(nodeSets["gpu"].GetSize()).To(Equal(int32(1)))
 			})
 
 			It("Creates cluster with catalog item specified by name", func() {
@@ -1422,6 +1432,108 @@ var _ = Describe("Private clusters server", func() {
 				Expect(err).ToNot(HaveOccurred())
 				object := response.GetObject()
 				Expect(object.GetSpec().GetPullSecret()).To(Equal("default-secret"))
+			})
+
+			It("Applies spec defaults from template when created via catalog item", func() {
+				// Create a template with spec defaults:
+				templatesDao, err := dao.NewGenericDAO[*privatev1.ClusterTemplate]().
+					SetLogger(logger).
+					SetTenancyLogic(tenancy).
+					Build()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = templatesDao.Create().
+					SetObject(
+						privatev1.ClusterTemplate_builder{
+							Id: "template-with-defaults",
+							Metadata: privatev1.Metadata_builder{
+								Name:   "template-with-defaults-name",
+								Tenant: auth.SharedTenant,
+							}.Build(),
+							Title:       "Template with defaults",
+							Description: "Template with spec defaults",
+							NodeSets: map[string]*privatev1.ClusterTemplateNodeSet{
+								"worker": privatev1.ClusterTemplateNodeSet_builder{
+									HostType: "acme-1ti-id",
+									Size:     2,
+								}.Build(),
+							},
+							SpecDefaults: privatev1.ClusterTemplateSpecDefaults_builder{
+								ReleaseImage: new("quay.io/openshift-release-dev/ocp-release:4.22"),
+							}.Build(),
+						}.Build(),
+					).
+					Do(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Create a catalog item referencing the template with defaults:
+				_, err = catalogItemsDao.Create().SetObject(
+					privatev1.ClusterCatalogItem_builder{
+						Id: "cat-with-defaults",
+						Metadata: privatev1.Metadata_builder{
+							Name:   "cat-with-defaults-name",
+							Tenant: "shared",
+						}.Build(),
+						Title:     "Catalog Item with Template Defaults",
+						Published: true,
+						Template:  "template-with-defaults",
+					}.Build(),
+				).Do(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Create a cluster via catalog item without specifying release_image:
+				response, err := server.Create(ctx, privatev1.ClustersCreateRequest_builder{
+					Object: privatev1.Cluster_builder{
+						Spec: privatev1.ClusterSpec_builder{
+							CatalogItem: "cat-with-defaults",
+						}.Build(),
+						Status: privatev1.ClusterStatus_builder{
+							Hub: "my-hub-id",
+						}.Build(),
+					}.Build(),
+				}.Build())
+				Expect(err).ToNot(HaveOccurred())
+				object := response.GetObject()
+
+				// Verify spec defaults from template are applied:
+				Expect(object.GetSpec().GetReleaseImage()).To(Equal("quay.io/openshift-release-dev/ocp-release:4.22"))
+
+				// Verify node sets are also populated:
+				nodeSets := object.GetSpec().GetNodeSets()
+				Expect(nodeSets).To(HaveLen(1))
+				Expect(nodeSets).To(HaveKey("worker"))
+				Expect(nodeSets["worker"].GetHostType()).To(Equal("acme-1ti-id"))
+				Expect(nodeSets["worker"].GetSize()).To(Equal(int32(2)))
+			})
+
+			It("Fails when catalog item has no template", func() {
+				_, err := catalogItemsDao.Create().SetObject(
+					privatev1.ClusterCatalogItem_builder{
+						Id: "cat-no-template",
+						Metadata: privatev1.Metadata_builder{
+							Name:   "cat-no-template-name",
+							Tenant: "shared",
+						}.Build(),
+						Title:     "Catalog Item Without Template",
+						Published: true,
+					}.Build(),
+				).Do(ctx)
+				Expect(err).ToNot(HaveOccurred())
+
+				_, err = server.Create(ctx, privatev1.ClustersCreateRequest_builder{
+					Object: privatev1.Cluster_builder{
+						Spec: privatev1.ClusterSpec_builder{
+							CatalogItem: "cat-no-template",
+						}.Build(),
+						Status: privatev1.ClusterStatus_builder{
+							Hub: "my-hub-id",
+						}.Build(),
+					}.Build(),
+				}.Build())
+				Expect(err).To(HaveOccurred())
+				status, ok := grpcstatus.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+				Expect(status.Message()).To(ContainSubstring("no template"))
 			})
 
 			It("Rejects changing catalog_item on update", func() {

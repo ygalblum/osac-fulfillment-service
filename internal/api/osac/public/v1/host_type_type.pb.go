@@ -43,6 +43,8 @@ const (
 // This is similar to the _instance type_ concept used by many cloud providers.
 //
 // The detailed chracteristics of the host (CPU, memory, GPU, etc) will be in the `description` field.
+//
+// buf:lint:ignore OSAC_OBJECT_SHAPE
 type HostType struct {
 	state protoimpl.MessageState `protogen:"hybrid.v1"`
 	// Unique identifier of the type.

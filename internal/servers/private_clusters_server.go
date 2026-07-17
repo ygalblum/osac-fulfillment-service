@@ -803,16 +803,58 @@ func (s *PrivateClustersServer) validateAndTransformCatalogItem(ctx context.Cont
 	}
 
 	templateRef := catalogItem.GetTemplate()
-	if templateRef != "" {
-		cluster.GetSpec().SetTemplate(templateRef)
+	if templateRef == "" {
+		return grpcstatus.Errorf(grpccodes.InvalidArgument, "catalog item '%s' has no template", catalogItemRef)
 	}
+	cluster.GetSpec().SetTemplate(templateRef)
 
 	if err := applyFieldDefinitions(cluster.GetSpec(), catalogItem.GetFieldDefinitions()); err != nil {
 		return err
 	}
 
+	// Look up the template to apply spec defaults, node sets, and parameter validation:
+	template, err := s.lookupTemplate(ctx, templateRef)
+	if err != nil {
+		return err
+	}
+	if template.GetMetadata().HasDeletionTimestamp() {
+		return grpcstatus.Errorf(grpccodes.InvalidArgument, "template '%s' has been deleted", templateRef)
+	}
+
+	utils.ApplyClusterSpecDefaults(cluster.GetSpec(), template.GetSpecDefaults())
+
 	if err := utils.ValidateClusterSpecFields(cluster.GetSpec()); err != nil {
 		return err
+	}
+
+	hostTypes, err := s.lookupAndIndexHostTypes(ctx, template)
+	if err != nil {
+		return err
+	}
+
+	templateNodeSets := template.GetNodeSets()
+	clusterNodeSets := cluster.GetSpec().GetNodeSets()
+	if err := s.validateNodeSets(clusterNodeSets, templateNodeSets, hostTypes, templateRef); err != nil {
+		return err
+	}
+
+	mergeNodeSetsWithTemplate(cluster, templateNodeSets, clusterNodeSets)
+
+	clusterParameters := cluster.GetSpec().GetTemplateParameters()
+	if err := utils.ValidateClusterTemplateParameters(template, clusterParameters); err != nil {
+		return err
+	}
+
+	actualClusterParameters := utils.ProcessTemplateParametersWithDefaults(
+		utils.ClusterTemplateAdapter{ClusterTemplate: template},
+		clusterParameters,
+	)
+	cluster.GetSpec().SetTemplateParameters(actualClusterParameters)
+
+	for _, clusterNodeSet := range cluster.GetSpec().GetNodeSets() {
+		hostTypeRef := clusterNodeSet.GetHostType()
+		hostType := hostTypes[hostTypeRef]
+		clusterNodeSet.SetHostType(hostType.GetId())
 	}
 
 	return nil
