@@ -394,6 +394,10 @@ func (s *GenericServer[O]) List(ctx context.Context, request any, response any) 
 		if errors.As(err, &deniedErr) {
 			return grpcstatus.Errorf(grpccodes.PermissionDenied, "%s", deniedErr.Reason)
 		}
+		var deadlockErr *dao.ErrDeadlock
+		if errors.As(err, &deadlockErr) {
+			return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
+		}
 		s.logger.ErrorContext(
 			ctx,
 			"Failed to list",
@@ -440,6 +444,10 @@ func (s *GenericServer[O]) Get(ctx context.Context, request any, response any) e
 		var deniedErr *dao.ErrDenied
 		if errors.As(err, &deniedErr) {
 			return grpcstatus.Errorf(grpccodes.PermissionDenied, "%s", deniedErr.Reason)
+		}
+		var deadlockErr *dao.ErrDeadlock
+		if errors.As(err, &deadlockErr) {
+			return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
 		}
 		s.logger.ErrorContext(
 			ctx,
@@ -497,6 +505,10 @@ func (s *GenericServer[O]) Create(ctx context.Context, request any, response any
 		var referenceErr *dao.ErrReference
 		if errors.As(err, &referenceErr) {
 			return grpcstatus.Errorf(grpccodes.InvalidArgument, "%s", referenceErr.Error())
+		}
+		var deadlockErr *dao.ErrDeadlock
+		if errors.As(err, &deadlockErr) {
+			return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
 		}
 		s.logger.ErrorContext(
 			ctx,
@@ -627,6 +639,10 @@ func (s *GenericServer[O]) Update(ctx context.Context, request any, response any
 		if errors.As(err, &deniedErr) {
 			return grpcstatus.Errorf(grpccodes.PermissionDenied, "%s", deniedErr.Reason)
 		}
+		var deadlockErr *dao.ErrDeadlock
+		if errors.As(err, &deadlockErr) {
+			return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
+		}
 		s.logger.ErrorContext(
 			ctx,
 			"Failed to get object",
@@ -747,6 +763,10 @@ func (s *GenericServer[O]) Update(ctx context.Context, request any, response any
 			if errors.As(err, &immutableErr) {
 				return grpcstatus.Errorf(grpccodes.InvalidArgument, "%s", immutableErr.Error())
 			}
+			var deadlockErr *dao.ErrDeadlock
+			if errors.As(err, &deadlockErr) {
+				return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
+			}
 			s.logger.ErrorContext(
 				ctx,
 				"Failed to update object",
@@ -834,6 +854,9 @@ func (s *GenericServer[O]) Delete(ctx context.Context, request any, response any
 		if ok {
 			return grpcstatus.Errorf(grpccodes.FailedPrecondition, "%s", inUseErr.Error())
 		}
+		if _, ok := errors.AsType[*dao.ErrDeadlock](err); ok {
+			return grpcstatus.Errorf(grpccodes.Aborted, "concurrent modification detected, please retry")
+		}
 		s.logger.ErrorContext(
 			ctx,
 			"Failed to delete object",
@@ -881,6 +904,10 @@ func (s *GenericServer[O]) Signal(ctx context.Context, request any, response any
 		var deniedErr *dao.ErrDenied
 		if errors.As(err, &deniedErr) {
 			return grpcstatus.Errorf(grpccodes.PermissionDenied, "%s", deniedErr.Reason)
+		}
+		var deadlockErr *dao.ErrDeadlock
+		if errors.As(err, &deadlockErr) {
+			return grpcstatus.Errorf(grpccodes.Aborted, "%s", deadlockErr.Error())
 		}
 		s.logger.ErrorContext(
 			ctx,

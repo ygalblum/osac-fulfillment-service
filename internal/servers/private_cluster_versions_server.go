@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,6 +32,7 @@ import (
 
 	privatev1 "github.com/osac-project/fulfillment-service/internal/api/osac/private/v1"
 	"github.com/osac-project/fulfillment-service/internal/auth"
+	"github.com/osac-project/fulfillment-service/internal/collections"
 	"github.com/osac-project/fulfillment-service/internal/database/dao"
 	"github.com/osac-project/fulfillment-service/internal/events"
 )
@@ -137,6 +139,11 @@ func (s *PrivateClusterVersionsServer) Create(ctx context.Context,
 	// Clear caller-provided ID so the DAO always generates a UUID:
 	cv.SetId("")
 
+	// Validate allowed_upgrades references:
+	if err := s.validateAllowedUpgrades(ctx, cv.GetSpec().GetAllowedUpgrades().GetVersionNames(), cv.GetMetadata().GetName()); err != nil {
+		return nil, err
+	}
+
 	// Safe to clear existing defaults before Create: the gRPC interceptor wraps the entire
 	// RPC in a single transaction, so the clear and Insert commit together — other connections
 	// never see a state with zero defaults.
@@ -192,6 +199,16 @@ func (s *PrivateClusterVersionsServer) Update(ctx context.Context,
 		}
 	}
 
+	// Validate allowed_upgrades references (only newly added entries):
+	if updateIncludesField(request.GetUpdateMask(), "spec.allowed_upgrades") {
+		added := collections.NewSet(request.GetObject().GetSpec().GetAllowedUpgrades().GetVersionNames()...).
+			Difference(collections.NewSet(existing.GetSpec().GetAllowedUpgrades().GetVersionNames()...)).
+			Inclusions()
+		if err := s.validateAllowedUpgrades(ctx, added, existing.GetMetadata().GetName()); err != nil {
+			return nil, err
+		}
+	}
+
 	applyClusterVersionStateEffects(existing, request)
 
 	if resolveIsDefault(existing, request) {
@@ -216,9 +233,33 @@ func (s *PrivateClusterVersionsServer) Update(ctx context.Context,
 
 func (s *PrivateClusterVersionsServer) Delete(ctx context.Context,
 	request *privatev1.ClusterVersionsDeleteRequest) (*privatev1.ClusterVersionsDeleteResponse, error) {
+	// Capture the object's name before soft-deleting, for allowed_upgrades cleanup:
+	id := request.GetId()
+	if id == "" {
+		return nil, grpcstatus.Errorf(grpccodes.InvalidArgument, "object identifier is mandatory")
+	}
+	var getResponse *privatev1.ClusterVersionsGetResponse
+	err := s.generic.Get(ctx, &privatev1.ClusterVersionsGetRequest{Id: id}, &getResponse)
+	if err != nil {
+		return nil, err
+	}
+	deletedName := getResponse.GetObject().GetMetadata().GetName()
+
+	// Perform the soft-delete:
 	var response *privatev1.ClusterVersionsDeleteResponse
-	err := s.generic.Delete(ctx, request, &response)
-	return response, err
+	err = s.generic.Delete(ctx, request, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	// Clean up references from other versions' allowed_upgrades:
+	if deletedName != "" {
+		if err := s.removeFromAllowedUpgrades(ctx, deletedName); err != nil {
+			return nil, err
+		}
+	}
+
+	return response, nil
 }
 
 func (s *PrivateClusterVersionsServer) Signal(ctx context.Context,
@@ -242,16 +283,12 @@ func (s *PrivateClusterVersionsServer) unsetPreviousDefaultClusterVersion(ctx co
 	if excludeID != "" {
 		filter += fmt.Sprintf(" && this.id != %s", strconv.Quote(excludeID))
 	}
-	listResponse, err := s.generic.dao.List().
-		SetFilter(filter).
-		Do(ctx)
+	// At most one item: the unique partial index enforces a single default.
+	items, err := s.listAllMatching(ctx, filter)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to list default ClusterVersions",
-			slog.Any("error", err),
-		)
-		return grpcstatus.Errorf(grpccodes.Internal, "failed to clear existing default ClusterVersions")
+		return err
 	}
-	for _, cv := range listResponse.GetItems() {
+	for _, cv := range items {
 		s.logger.DebugContext(ctx, "unsetting previous default ClusterVersion",
 			"old_default_id", cv.GetId(),
 		)
@@ -263,6 +300,9 @@ func (s *PrivateClusterVersionsServer) unsetPreviousDefaultClusterVersion(ctx co
 					slog.String("cluster_version_id", cv.GetId()),
 				)
 				continue
+			}
+			if _, ok := errors.AsType[*dao.ErrDeadlock](err); ok {
+				return grpcstatus.Errorf(grpccodes.Aborted, "concurrent modification detected, please retry")
 			}
 			s.logger.ErrorContext(ctx, "Failed to clear default on ClusterVersion",
 				slog.String("cluster_version_id", cv.GetId()),
@@ -517,4 +557,158 @@ func generateNameFromVersion(version string) string {
 	h := fnv.New32a()
 	h.Write([]byte(version))
 	return fmt.Sprintf("%s-%04x", result, h.Sum32()%0x10000)
+}
+
+// validateAllowedUpgrades validates that each name references an existing, enabled,
+// non-obsolete ClusterVersion that is not the object itself.
+func (s *PrivateClusterVersionsServer) validateAllowedUpgrades(
+	ctx context.Context, names []string, selfName string) error {
+	if len(names) == 0 {
+		return nil
+	}
+
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	filter := fmt.Sprintf(
+		"this.metadata.name in [%s] && !has(this.metadata.deletion_timestamp)",
+		strings.Join(quoted, ", "),
+	)
+	items, err := s.listAllMatching(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	found := make(map[string]*privatev1.ClusterVersion, len(items))
+	for _, item := range items {
+		found[item.GetMetadata().GetName()] = item
+	}
+	for _, name := range names {
+		if name == selfName {
+			return grpcstatus.Errorf(grpccodes.InvalidArgument,
+				"allowed_upgrades version '%s' is a self-reference", name)
+		}
+		target, ok := found[name]
+		if !ok {
+			return grpcstatus.Errorf(grpccodes.InvalidArgument,
+				"allowed_upgrades version '%s' does not exist", name)
+		}
+		if target.GetSpec().HasEnabled() && !target.GetSpec().GetEnabled() {
+			return grpcstatus.Errorf(grpccodes.InvalidArgument,
+				"allowed_upgrades version '%s' is disabled", name)
+		}
+		if target.GetSpec().GetState() == privatev1.ClusterVersionState_CLUSTER_VERSION_STATE_OBSOLETE {
+			return grpcstatus.Errorf(grpccodes.InvalidArgument,
+				"allowed_upgrades version '%s' is obsolete", name)
+		}
+	}
+	return nil
+}
+
+// listAllMatching returns all ClusterVersions matching the given CEL filter,
+// paginating through all results. The returned objects are in listing order (not sorted).
+func (s *PrivateClusterVersionsServer) listAllMatching(ctx context.Context, filter string) ([]*privatev1.ClusterVersion, error) {
+	var result []*privatev1.ClusterVersion
+	for offset := int32(0); ; offset += 1000 {
+		listResponse, err := s.generic.dao.List().
+			SetFilter(filter).
+			SetLimit(1000).
+			SetOffset(offset).
+			Do(ctx)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "Failed to list ClusterVersions",
+				slog.Any("error", err),
+			)
+			return nil, grpcstatus.Errorf(grpccodes.Internal, "failed to list ClusterVersions")
+		}
+		result = append(result, listResponse.GetItems()...)
+		if len(listResponse.GetItems()) < 1000 {
+			break
+		}
+	}
+	return result, nil
+}
+
+// removeFromAllowedUpgrades removes the given name from all active ClusterVersions'
+// allowed_upgrades.version_names. Preserves the AllowedUpgrades message even when the
+// array becomes empty. Each affected row is updated via the DAO, which increments its version.
+func (s *PrivateClusterVersionsServer) removeFromAllowedUpgrades(
+	ctx context.Context, deletedName string) error {
+	// Collect all matching IDs before locking, so we can sort globally and
+	// acquire row locks in a consistent order.
+	filter := fmt.Sprintf(
+		"%s in this.spec.allowed_upgrades.version_names && !has(this.metadata.deletion_timestamp)",
+		strconv.Quote(deletedName),
+	)
+	items, err := s.listAllMatching(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	ids := make([]string, len(items))
+	for i, cv := range items {
+		ids[i] = cv.GetId()
+	}
+
+	// Sort IDs to prevent deadlocks when concurrent deletions lock
+	// overlapping row sets.
+	slices.Sort(ids)
+
+	for _, id := range ids {
+		// Lock the row and re-read fresh data to prevent lost updates:
+		getResponse, err := s.generic.dao.Get().
+			SetId(id).
+			SetLock(true).
+			Do(ctx)
+		if err != nil {
+			if _, ok := errors.AsType[*dao.ErrNotFound](err); ok {
+				continue
+			}
+			if _, ok := errors.AsType[*dao.ErrDeadlock](err); ok {
+				return grpcstatus.Errorf(grpccodes.Aborted, "concurrent modification detected, please retry")
+			}
+			s.logger.ErrorContext(ctx, "Failed to lock ClusterVersion for allowed_upgrades cleanup",
+				slog.String("cluster_version_id", id),
+				slog.Any("error", err),
+			)
+			return grpcstatus.Errorf(grpccodes.Internal, "failed to clean up allowed_upgrades references")
+		}
+
+		cv := getResponse.GetObject()
+		au := cv.GetSpec().GetAllowedUpgrades()
+		names := au.GetVersionNames()
+
+		// If a concurrent operation already removed the name, skip to
+		// avoid a needless version bump.
+		if !slices.Contains(names, deletedName) {
+			continue
+		}
+
+		var filtered []string
+		for _, n := range names {
+			if n != deletedName {
+				filtered = append(filtered, n)
+			}
+		}
+		if filtered == nil {
+			filtered = []string{}
+		}
+		au.SetVersionNames(filtered)
+		_, err = s.generic.dao.Update().SetObject(cv).Do(ctx)
+		if err != nil {
+			if _, ok := errors.AsType[*dao.ErrNotFound](err); ok {
+				continue
+			}
+			if _, ok := errors.AsType[*dao.ErrDeadlock](err); ok {
+				return grpcstatus.Errorf(grpccodes.Aborted, "concurrent modification detected, please retry")
+			}
+			s.logger.ErrorContext(ctx, "Failed to clean up allowed_upgrades reference",
+				slog.String("cluster_version_id", cv.GetId()),
+				slog.Any("error", err),
+			)
+			return grpcstatus.Errorf(grpccodes.Internal, "failed to clean up allowed_upgrades references")
+		}
+	}
+	return nil
 }
