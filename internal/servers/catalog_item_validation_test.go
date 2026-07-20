@@ -308,7 +308,7 @@ var _ = Describe("applyFieldDefinitions rejects unlisted fields", func() {
 		defaultVal, err := structpb.NewValue("ssh-ed25519 AAAA")
 		Expect(err).ToNot(HaveOccurred())
 		fieldDefs := []*privatev1.FieldDefinition{{
-			Path:     "ssh_key",
+			Path:     "ssh_public_key",
 			Editable: true,
 			Default:  defaultVal,
 		}}

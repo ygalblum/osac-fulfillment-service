@@ -1185,7 +1185,7 @@ var _ = Describe("Private compute instances server", func() {
 			It("Rejects user value for non-editable field", func() {
 				createCICatalogItem("ci-cat-nonedit", true, []*privatev1.FieldDefinition{
 					privatev1.FieldDefinition_builder{
-						Path:     "ssh_key",
+						Path:     "ssh_public_key",
 						Editable: false,
 						Default:  structpb.NewStringValue("forced-key"),
 					}.Build(),
@@ -1198,8 +1198,8 @@ var _ = Describe("Private compute instances server", func() {
 				_, err := server.Create(ctx, privatev1.ComputeInstancesCreateRequest_builder{
 					Object: privatev1.ComputeInstance_builder{
 						Spec: privatev1.ComputeInstanceSpec_builder{
-							CatalogItem: "ci-cat-nonedit",
-							SshKey:      new("user-key"),
+							CatalogItem:  "ci-cat-nonedit",
+							SshPublicKey: new("user-key"),
 							NetworkAttachments: []*privatev1.NetworkAttachment{
 								privatev1.NetworkAttachment_builder{
 									Subnet: "test-subnet",
@@ -1219,7 +1219,7 @@ var _ = Describe("Private compute instances server", func() {
 				func(catID string, value string, expectError bool) {
 					createCICatalogItem(catID, true, []*privatev1.FieldDefinition{
 						privatev1.FieldDefinition_builder{
-							Path:             "ssh_key",
+							Path:             "ssh_public_key",
 							Editable:         true,
 							ValidationSchema: `{"type":"string","minLength":10}`,
 						}.Build(),
@@ -1232,8 +1232,8 @@ var _ = Describe("Private compute instances server", func() {
 					response, err := server.Create(ctx, privatev1.ComputeInstancesCreateRequest_builder{
 						Object: privatev1.ComputeInstance_builder{
 							Spec: privatev1.ComputeInstanceSpec_builder{
-								CatalogItem: catID,
-								SshKey:      new(value),
+								CatalogItem:  catID,
+								SshPublicKey: new(value),
 								NetworkAttachments: []*privatev1.NetworkAttachment{
 									privatev1.NetworkAttachment_builder{
 										Subnet: "test-subnet",
@@ -1247,10 +1247,10 @@ var _ = Describe("Private compute instances server", func() {
 						status, ok := grpcstatus.FromError(err)
 						Expect(ok).To(BeTrue())
 						Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
-						Expect(status.Message()).To(ContainSubstring("validation failed for field 'ssh_key'"))
+						Expect(status.Message()).To(ContainSubstring("validation failed for field 'ssh_public_key'"))
 					} else {
 						Expect(err).ToNot(HaveOccurred())
-						Expect(response.GetObject().GetSpec().GetSshKey()).To(Equal(value))
+						Expect(response.GetObject().GetSpec().GetSshPublicKey()).To(Equal(value))
 					}
 				},
 				Entry("rejects value below minLength", "ci-cat-schema-reject", "short-val", true),
@@ -1260,7 +1260,7 @@ var _ = Describe("Private compute instances server", func() {
 			It("Applies default for editable field when not provided", func() {
 				createCICatalogItem("ci-cat-dflt", true, []*privatev1.FieldDefinition{
 					privatev1.FieldDefinition_builder{
-						Path:     "ssh_key",
+						Path:     "ssh_public_key",
 						Editable: true,
 						Default:  structpb.NewStringValue("default-key"),
 					}.Build(),
@@ -1284,7 +1284,7 @@ var _ = Describe("Private compute instances server", func() {
 				}.Build())
 				Expect(err).ToNot(HaveOccurred())
 				object := response.GetObject()
-				Expect(object.GetSpec().GetSshKey()).To(Equal("default-key"))
+				Expect(object.GetSpec().GetSshPublicKey()).To(Equal("default-key"))
 			})
 
 			It("Rejects changing catalog_item on update", func() {
