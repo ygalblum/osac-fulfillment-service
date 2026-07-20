@@ -142,11 +142,6 @@ var _ = Describe("Generic server", func() {
 var _ = Describe("Generic server dry run", func() {
 	var server *GenericServer[*privatev1.HostType]
 
-	dryRunCtx := func() context.Context {
-		md := grpcmetadata.Pairs("x-dry-run", "true")
-		return grpcmetadata.NewIncomingContext(ctx, md)
-	}
-
 	BeforeEach(func() {
 		var err error
 		notifier := events.NewMockNotifier(gomock.NewController(GinkgoT()))
@@ -236,5 +231,44 @@ var _ = Describe("Generic server dry run", func() {
 			&response,
 		)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("Persists normally when header value is false", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		notifier := events.NewMockNotifier(ctrl)
+		notifier.EXPECT().Notify(gomock.Any(), gomock.Any()).Return(nil)
+		srv, err := NewGenericServer[*privatev1.HostType]().
+			SetLogger(logger).
+			SetService(privatev1.HostTypes_ServiceDesc.ServiceName).
+			SetAttributionLogic(attribution).
+			SetTenancyLogic(tenancy).
+			SetNotifier(notifier).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
+
+		falseCtx := grpcmetadata.NewIncomingContext(ctx,
+			grpcmetadata.Pairs(DryRunMetadataKey, "false"))
+
+		response := &privatev1.HostTypesCreateResponse{}
+		err = srv.Create(
+			falseCtx,
+			privatev1.HostTypesCreateRequest_builder{
+				Object: privatev1.HostType_builder{
+					Metadata: privatev1.Metadata_builder{
+						Name: "not-a-dry-run",
+					}.Build(),
+				}.Build(),
+			}.Build(),
+			&response,
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		listResponse := &privatev1.HostTypesListResponse{}
+		err = srv.List(ctx,
+			privatev1.HostTypesListRequest_builder{}.Build(),
+			&listResponse,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(listResponse.GetTotal()).To(Equal(int32(1)))
 	})
 })

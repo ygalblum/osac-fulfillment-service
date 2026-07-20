@@ -14,13 +14,11 @@ language governing permissions and limitations under the License.
 package servers
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	grpccodes "google.golang.org/grpc/codes"
-	grpcmetadata "google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -1806,11 +1804,6 @@ var _ = Describe("Clusters server", func() {
 		})
 
 		Describe("Dry run", func() {
-			dryRunCtx := func() context.Context {
-				md := grpcmetadata.Pairs("x-dry-run", "true")
-				return grpcmetadata.NewIncomingContext(ctx, md)
-			}
-
 			It("Returns resolved cluster without persisting", func() {
 				response, err := server.Create(dryRunCtx(), publicv1.ClustersCreateRequest_builder{
 					Object: publicv1.Cluster_builder{

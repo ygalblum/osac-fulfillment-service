@@ -14,14 +14,12 @@ language governing permissions and limitations under the License.
 package servers
 
 import (
-	"context"
 	"fmt"
 	"math"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	grpccodes "google.golang.org/grpc/codes"
-	grpcmetadata "google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -1713,11 +1711,6 @@ var _ = Describe("Private clusters server", func() {
 		})
 
 		Describe("Dry run", func() {
-			dryRunCtx := func() context.Context {
-				md := grpcmetadata.Pairs("x-dry-run", "true")
-				return grpcmetadata.NewIncomingContext(ctx, md)
-			}
-
 			It("Returns resolved cluster with template path", func() {
 				response, err := server.Create(dryRunCtx(), privatev1.ClustersCreateRequest_builder{
 					Object: privatev1.Cluster_builder{
