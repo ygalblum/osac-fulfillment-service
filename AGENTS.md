@@ -24,6 +24,11 @@ This file contains only frequently-needed commands and non-obvious rules. For de
   - Python: `pyproject.toml`
   - YAML: `.yamllint.yaml`
 
+**Before planning or implementing any change, read every document listed above that is
+relevant to the area you are working in.** Do not rely solely on existing source code as a
+reference -- the documents above describe design intent and conventions that are not always
+obvious from the code alone. Skipping them leads to subtle bugs and convention violations.
+
 ## Overview
 
 The fulfillment-service is a gRPC server with REST gateway for managing infrastructure resources
