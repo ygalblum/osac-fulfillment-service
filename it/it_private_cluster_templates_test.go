@@ -38,6 +38,17 @@ var _ = Describe("Private cluster templates", func() {
 	})
 
 	It("Can get the list of templates", func() {
+		// Create a template:
+		id := fmt.Sprintf("my_template_%s", uuid.New())
+		_, err := client.Create(ctx, privatev1.ClusterTemplatesCreateRequest_builder{
+			Object: privatev1.ClusterTemplate_builder{
+				Id:          id,
+				Title:       "My title",
+				Description: "My description.",
+			}.Build(),
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+
 		listResponse, err := client.List(ctx, privatev1.ClusterTemplatesListRequest_builder{}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(listResponse).ToNot(BeNil())

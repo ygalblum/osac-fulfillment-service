@@ -1,0 +1,29 @@
+'@type': type.googleapis.com/osac.public.v1.ClusterCatalogItem
+metadata:
+  name: cluster-1-421
+title: OCP cluster 421
+description: Small development cluster with locked-down defaults.
+template: "osac.templates.ocp_small"
+published: true
+field_definitions:
+  - path: ssh_public_key
+    display_name: SSH Public Key
+    editable: true
+    default: "ssh-ed25519 AAAA..."
+  - path: node_sets.workers.size
+    display_name: Workers Count
+    editable: false
+    default: 1
+  - path: node_sets.workers.host_type
+    display_name: Workers Resource Class
+    editable: true
+    default: "fc430"
+  - path: release_image
+    display_name: Release Image
+    editable: false
+    default: "quay.io/openshift-release-dev/ocp-release:4.21.7-multi"
+  - path: network.pod_cidr
+    display_name: Pod CIDR
+    editable: true
+    default: "10.128.0.0/14"
+    validation_schema: '{"type":"string","pattern":"^[0-9./]+$"}'
